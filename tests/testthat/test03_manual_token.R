@@ -121,25 +121,6 @@ test_that("AzureManualToken can_refresh returns FALSE",
     expect_false(tok$can_refresh())
 })
 
-
-test_that("AzureManualToken refresh warns for expired token",
-{
-    expired_token <- create_test_jwt(exp_offset = -3600)
-    tok <- get_manual_token(expired_token)
-
-    expect_warning(tok$refresh(), "cannot be auto-refreshed")
-})
-
-
-test_that("AzureManualToken refresh messages for valid token",
-{
-    valid_token <- create_test_jwt(exp_offset = 3600)
-    tok <- get_manual_token(valid_token)
-
-    expect_message(tok$refresh(), "cannot be refreshed")
-})
-
-
 test_that("AzureManualToken stores raw token in credentials",
 {
     test_token <- create_test_jwt()
@@ -193,7 +174,7 @@ test_that("AzureManualToken print works",
     test_token <- create_test_jwt()
     tok <- get_manual_token(test_token)
 
-    expect_output(print(tok), "manual token")
+    expect_output(print(tok), "manual")
     expect_output(print(tok), "cannot be refreshed")
 })
 

@@ -91,56 +91,56 @@ public = list(
         self$token_args <- list()
         self$authorize_args <- list()
 
-        # Attempt to parse JWT claims
-        tryCatch({
-            claims <- decode_jwt(token)$payload
+        # Parse JWT claims (may fail for opaque tokens)
+        claims <- try(decode_jwt(token)$payload, silent=TRUE)
+        if(inherits(claims, "try-error"))
+        {
+            claims <- list()
+            message("Note: Token could not be parsed as a JWT, metadata will be limited.")
+        }
 
-            # Extract tenant from tid claim
-            if(!is.null(claims$tid))
-                self$tenant <- claims$tid
+        # Extract tenant from tid claim
+        if(!is.null(claims$tid))
+            self$tenant <- claims$tid
 
-            # Extract resource/audience from aud claim
-            if(!is.null(claims$aud))
-            {
-                self$resource <- claims$aud
-                # For v2.0 tokens, also set scope
-                self$scope <- claims$aud
-            }
+        # Extract resource/audience from aud claim
+        if(!is.null(claims$aud))
+        {
+            self$resource <- claims$aud
+            # For v2.0 tokens, also set scope
+            self$scope <- claims$aud
+        }
 
-            # Extract scopes if available (v2.0 tokens use scp claim)
-            if(!is.null(claims$scp))
-            {
-                self$scope <- strsplit(claims$scp, " ")[[1]]
-            }
+        # Extract scopes if available (v2.0 tokens use scp claim)
+        if(!is.null(claims$scp))
+        {
+            self$scope <- strsplit(claims$scp, " ")[[1]]
+        }
 
-            # Extract version from ver claim if available
-            if(!is.null(claims$ver))
-            {
-                ver <- as.numeric(sub("^([0-9]+).*", "\\1", claims$ver))
-                if(!is.na(ver) && ver %in% c(1, 2))
-                    self$version <- ver
-            }
+        # Extract version from ver claim if available
+        if(!is.null(claims$ver))
+        {
+            ver <- as.numeric(sub("^([0-9]+).*", "\\1", claims$ver))
+            if(!is.na(ver) && ver %in% c(1, 2))
+                self$version <- ver
+        }
 
-            # Set expiration time
-            if(!is.null(claims$exp))
-            {
-                self$credentials$expires_on <- as.character(claims$exp)
-            }
+        # Set expiration time
+        if(!is.null(claims$exp))
+        {
+            self$credentials$expires_on <- as.character(claims$exp)
+        }
 
-            # Calculate expires_in if we have both exp and iat
-            if(!is.null(claims$exp) && !is.null(claims$iat))
-            {
-                self$credentials$expires_in <- as.character(claims$exp - claims$iat)
-            }
-            else if(!is.null(claims$exp))
-            {
-                # Estimate expires_in from current time
-                self$credentials$expires_in <- as.character(claims$exp - as.numeric(Sys.time()))
-            }
-
-        }, error = function(e) {
-            message("Note: Token metadata could not be parsed (token may be opaque or malformed).")
-        })
+        # Calculate expires_in if we have both exp and iat
+        if(!is.null(claims$exp) && !is.null(claims$iat))
+        {
+            self$credentials$expires_in <- as.character(claims$exp - claims$iat)
+        }
+        else if(!is.null(claims$exp))
+        {
+            # Estimate expires_in from current time
+            self$credentials$expires_in <- as.character(claims$exp - as.numeric(Sys.time()))
+        }
 
         # Override with user-provided values if specified
         if(!is.null(tenant))
@@ -174,19 +174,9 @@ public = list(
     },
 
     #' @description Refresh the token. Manual tokens cannot be refreshed.
-    #' @return Returns self invisibly, with a warning if the token has expired.
+    #' @return Returns self invisibly.
     refresh = function()
     {
-        if(!self$validate())
-        {
-            warning("This manual token has expired and cannot be auto-refreshed. ",
-                    "Please obtain a new token and create a new AzureManualToken object.",
-                    call. = FALSE)
-        }
-        else
-        {
-            message("Manual tokens cannot be refreshed. The current token is still valid.")
-        }
         invisible(self)
     },
 
@@ -222,23 +212,9 @@ public = list(
     #' @description Print the token object.
     print = function()
     {
-        expiry <- as.POSIXct(as.numeric(self$credentials$expires_on), origin = "1970-01-01")
-        valid <- if(self$validate()) "valid" else "EXPIRED"
-
-        version_str <- if(self$version == 1) "v1.0" else "v2.0"
-        res_str <- if(self$version == 1) {
-            paste("resource", self$resource)
-        } else {
-            paste("scope", if(is.character(self$scope)) paste(self$scope, collapse = " ") else self$resource)
-        }
-
-        cat(paste0(
-            "Azure Active Directory ", version_str, " manual token for ", res_str, "\n",
-            "  Tenant: ", self$tenant, "\n",
-            "  Token status: ", valid, "\n",
-            "  Expires: ", format(expiry, usetz = TRUE), "\n",
-            "  Note: This token was provided externally and cannot be refreshed.\n"
-        ))
+        cat(format_auth_header(self))
+        cat("
+This is a manual token and cannot be refreshed.\n")
         invisible(self)
     }
 ),
